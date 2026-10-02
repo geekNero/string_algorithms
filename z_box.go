@@ -2,31 +2,43 @@ package main
 
 import "fmt"
 
-func ZBox() {
-	fmt.Println("Input Text:")
-	var text string
-	fmt.Scan(&text)
-
-	fmt.Println("Input Pattern:")
-	var pattern string
-	fmt.Scan(&pattern)
-
-	s := pattern + "$" + text
+func ZBox(s string) {
 
 	l := 0
 	r := 0
-	z := []int{}
+	// First value of z is never supposed to be used
+	z := []int{-1}
 
 	for i := 1; i < len(s); i++ {
-		if len(z) == 0 {
+		if i > r {
 			z = append(z, bruteMatch(i, &s))
-			if z[i-1] > 0 {
+			if z[i] > 0 {
 				l = i
-				r = l + z[i-1] + 1
+				r = l + z[i] - 1
+			}
+		} else {
+			pos := i - l
+
+			alpha := r - i + 1
+			if z[pos] > alpha {
+				z = append(z, alpha)
+			} else if z[pos] == alpha {
+				index := alpha
+				for _, char := range s {
+					if char == rune(s[index]) {
+						index++
+					} else {
+						break
+					}
+				}
+				z = append(z, index)
+			} else {
+				z = append(z, z[pos])
 			}
 		}
-		// if r>= x
 	}
+
+	fmt.Println(z)
 }
 
 func bruteMatch(index int, s *string) int {
