@@ -7,12 +7,12 @@ func main() {
 	var text string
 	fmt.Scan(&text)
 
-	// fmt.Println("Input Pattern:")
-	// var pattern string
-	// fmt.Scan(&pattern)
+	fmt.Println("Input Pattern:")
+	var pattern string
+	fmt.Scan(&pattern)
 
-	// s := pattern + "$" + text
+	s := pattern + "$" + text
 
 	// ZBox(text)
-	ZBoxPMatch(text)
+	ZBoxPMatch(s)
 }
