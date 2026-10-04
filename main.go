@@ -3,7 +3,6 @@ package main
 import "fmt"
 
 func main() {
-
 	fmt.Println("Input Text:")
 	var text string
 	fmt.Scan(&text)
@@ -14,5 +13,6 @@ func main() {
 
 	// s := pattern + "$" + text
 
-	ZBox(text)
+	// ZBox(text)
+	ZBoxPMatch(text)
 }
