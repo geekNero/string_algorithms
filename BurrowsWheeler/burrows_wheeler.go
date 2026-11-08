@@ -13,7 +13,6 @@ type BWTRune struct {
 }
 
 func main() {
-
 	if len(os.Args) < 3 {
 		fmt.Println("expected args: filename searchQuery")
 		os.Exit(1)
@@ -32,11 +31,9 @@ func main() {
 	firstCol, lastCol := BurrowsWheelerTransform(textData)
 
 	fmt.Println(BWTSearch(firstCol, lastCol, searchQuery))
-
 }
 
 func BurrowsWheelerTransform(textData []byte) ([]rune, []BWTRune) {
-
 	text := string(textData)
 	text = strings.ToLower(text)
 	text = strings.TrimSpace(text) + "$"
@@ -48,7 +45,6 @@ func BurrowsWheelerTransform(textData []byte) ([]rune, []BWTRune) {
 	}
 
 	slices.SortFunc(substringIndices, func(a int, b int) int {
-
 		if text[a:] < text[b:] {
 			return -1
 		} else if text[a:] > text[b:] {
@@ -56,7 +52,6 @@ func BurrowsWheelerTransform(textData []byte) ([]rune, []BWTRune) {
 		} else {
 			return 0
 		}
-
 	})
 
 	lastColumn := []BWTRune{}
@@ -73,7 +68,6 @@ func BurrowsWheelerTransform(textData []byte) ([]rune, []BWTRune) {
 	}
 
 	return firstColumn, lastColumn
-
 }
 
 func BWTSearch(firstColumn []rune, lastColumn []BWTRune, searchString string) bool {
@@ -92,11 +86,9 @@ func BWTSearch(firstColumn []rune, lastColumn []BWTRune, searchString string) bo
 	}
 
 	return search(searchString[:len(searchString)-1], firstColumn, lastColumn, cutset)
-
 }
 
 func search(searchString string, firstColumn []rune, lastColumn []BWTRune, cutset []int) bool {
-
 	if len(searchString) == 0 {
 		return true
 	}
@@ -118,5 +110,4 @@ func search(searchString string, firstColumn []rune, lastColumn []BWTRune, cutse
 	} else {
 		return search(searchString[:len(searchString)-1], firstColumn, lastColumn, newCutset)
 	}
-
 }

@@ -2,5 +2,5 @@
 package main
 
 func main() {
-	KarpRabinOptimized("26", "3141592653589793")
+	KarpRabinCLRS("26", "3141592653589793")
 }
