@@ -90,28 +90,33 @@ using namespace std;
 //                      binary_exponentiation(sigma, y - x + 1) % MOD64;
 //   return (uint64_t(prefix_hash[y]) + MOD64 - removed) % MOD64;
 // }
+//
+
+int compute_bits_per_char(uint base) {
+  if (base < 2)
+    throw std::invalid_argument("base must be at least 2");
+  int bits = 32 - __builtin_clz(base - 1);
+  if (bits >= 64)
+    throw std::invalid_argument("base is too large");
+  return bits;
+}
 
 vector<u_int64_t> encode_string(string &text, int base,
                                 unordered_map<char, int> &rank) {
-  if (base < 2) {
-    throw invalid_argument("base must be at least 2");
-  }
 
-  const int bits_per_char = ceil(log2(base));
-  if (bits_per_char >= 64)
-    throw std::invalid_argument("base is too large");
+  const int bits_per_char = compute_bits_per_char(base);
 
   vector<uint64_t> packed_text;
   // the only way I can think of packing each word is by filing each int64
   // individually.
   uint64_t packet = 0;
   int packet_size = 64;
-  aut(ch, text) {
+  for (auto ch : text) {
     const int use_bits = min(packet_size, bits_per_char);
-    const int code = rank.at(ch);
+    const uint64_t code = rank.at(ch);
     if (code < 0 || code >= base)
       throw invalid_argument("rank outside alphabet");
-    int value = code >> (bits_per_char - use_bits);
+    uint64_t value = code >> (bits_per_char - use_bits);
     packet <<= use_bits;
     packet += value;
     packet_size -= use_bits;
@@ -123,7 +128,7 @@ vector<u_int64_t> encode_string(string &text, int base,
       int const remaining_bits = bits_per_char - use_bits;
       if (remaining_bits) {
 
-        int const mask = (1 << remaining_bits) - 1;
+        uint64_t const mask = (1ULL << remaining_bits) - 1;
         value = code & mask;
 
         packet = value;
@@ -140,15 +145,10 @@ vector<u_int64_t> encode_string(string &text, int base,
 
 string decode_string(const vector<u_int64_t> &packed_text, int base,
                      const vector<char> &rank, int n) {
-  if (base < 2)
-    throw invalid_argument("base must be at least 2");
-
   if (n < 0)
     throw invalid_argument("character count must be nonnegative");
 
-  const int bits_per_char = ceil(log2(base));
-  if (bits_per_char >= 64)
-    throw std::invalid_argument("base is too large");
+  const int bits_per_char = compute_bits_per_char(base);
 
   string s = "";
   s.reserve(n);
@@ -172,7 +172,7 @@ string decode_string(const vector<u_int64_t> &packed_text, int base,
     const int remaining = bits_per_char - (start_bit - end_bit);
     const int ls = 64 - start_bit;
 
-    int value = (packed_text[block_index] << ls) >> (end_bit + ls);
+    uint64_t value = (packed_text[block_index] << ls) >> (end_bit + ls);
 
     start_bit = end_bit;
 
