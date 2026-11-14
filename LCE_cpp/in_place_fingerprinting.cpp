@@ -1,14 +1,17 @@
 #include <algorithm>
 #include <climits>
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <iostream>
+#include <optional>
 #include <random>
 #include <stdexcept>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 using namespace std;
@@ -32,6 +35,28 @@ using namespace std;
 #define aut(e, v) for (auto e : v)
 
 const u_int64_t MOD64 = (1ULL << 63) + 29ULL;
+
+uint64_t subtract_mod(uint64_t a, uint64_t b) {
+  return a >= b ? a - b : MOD64 - (b - a);
+}
+
+struct FingerprintMetadata {
+
+  int tau;
+  u_int64_t offset;
+  u_int64_t multiplier;
+};
+
+struct WordRAMCompressed {
+  int base = 256;
+  int bits_per_char = 0;
+  size_t character_count = 0;
+  vector<u_int64_t> words;
+  unordered_map<char, int> mapping;
+  vector<char> rank;
+
+  optional<FingerprintMetadata> fingerprint;
+};
 
 u_int64_t binary_exponentiation(u_int64_t x, int n) {
   unsigned __int128 base = x % MOD64; // Assumes x >= 0.
@@ -135,80 +160,117 @@ u_int64_t deterministicaly_find_fingerprint_offset(vector<u_int64_t> &blocks,
 // word. To deal with this, we can leave some spare bits and use a smaller
 // prime based on the actual number of bits being used. For now, I'm sticking
 // to a base of 256.
-u_int64_t inplace_fingerprint(vector<u_int64_t> &blocks) {
-  const int base = 256;
-  const int bits_per_char = compute_bits_per_char(base); // 8
-  const int tau = 64 / bits_per_char;                    // 8
+void inplace_fingerprint(WordRAMCompressed &packing) {
+
+  if (packing.fingerprint.has_value())
+    throw invalid_argument("already fingerprinted");
+
+  if (packing.base != 256)
+    throw invalid_argument("only base 256 is currently supported");
+
+  const int bits_per_char = compute_bits_per_char(packing.base); // 8
+  const int tau = 64 / bits_per_char;                            // 8
 
   u_int64_t prefix_hash = 0;
-  const u_int64_t multiplier = binary_exponentiation(base, tau);
+  const u_int64_t multiplier = binary_exponentiation(packing.base, tau);
   // const u_int64_t offset =
   //     deterministicaly_find_fingerprint_offset(blocks, multiplier);
   const u_int64_t offset =
-      nondeterminstically_find_fingerprint_offset(blocks, multiplier);
+      nondeterminstically_find_fingerprint_offset(packing.words, multiplier);
 
-  for (int i = 0; i < blocks.size(); i++) {
-    bool quotient_bit = blocks[i] >= MOD64;
+  for (size_t i = 0; i < packing.words.size(); i++) {
+    bool quotient_bit = packing.words[i] >= MOD64;
 
-    prefix_hash =
-        (static_cast<unsigned __int128>(prefix_hash) * multiplier + blocks[i]) %
-        MOD64;
+    prefix_hash = (static_cast<unsigned __int128>(prefix_hash) * multiplier +
+                   packing.words[i]) %
+                  MOD64;
 
-    blocks[i] = (static_cast<unsigned __int128>(prefix_hash) + offset) % MOD64;
+    packing.words[i] =
+        (static_cast<unsigned __int128>(prefix_hash) + offset) % MOD64;
     if (quotient_bit) {
-      blocks[i] |= 1ULL << 63;
+      packing.words[i] |= 1ULL << 63;
     }
   }
 
-  return offset;
+  packing.fingerprint = {tau, offset, multiplier};
+
+  return;
 }
 
-// This is an attempt at implementing the version of karp-rabin mentioned in
-// the Practical Performance of Space Efficient Data Structures for Longest
-// Common Extensions
-vector<uint> karp_rabin(string &text, int sigma, unordered_map<char, int> &rank,
-                        uint &mx_rank) {
+uint64_t clean_fingerprint_block(uint64_t block, uint64_t offset) {
+  const uint64_t MASK = (1ULL << 63) - 1;
+  uint64_t shifted = block & MASK;
+  return subtract_mod(shifted, offset);
+}
 
-  //   // Since we don't have a way of determining the size of the grammar as
-  //   of now,
-  //   // we'll take is as an input for now.
-  vector<uint> prefix_hash(text.size());
+u_int64_t read_fingerprint_word(const WordRAMCompressed &packing,
+                                size_t block_index) {
+  if (block_index >= packing.words.size())
+    throw invalid_argument("block_index exceeds block count");
 
-  // since we don't care for the lexiographical ordering in karp-rabin, we can
-  // assign ranks to characters as we see them, with minimum rank being 1.
+  const auto &metadata = packing.fingerprint.value();
 
-  uint64_t current_hash = 0;
+  uint64_t quotient_bit = packing.words[block_index] >> 63;
 
-  rep(i, 0, text.size()) {
+  // Bi mod q = (Hi - H(i-1) * M) mod q
 
-    current_hash *= sigma;
-    if (rank[text[i]] == 0) {
-      rank[text[i]] = ++mx_rank;
-    }
-    current_hash += rank[text[i]];
-    current_hash %= MOD64;
+  auto Hi =
+      clean_fingerprint_block(packing.words[block_index], metadata.offset);
+  auto Hi_1 = block_index == 0
+                  ? 0
+                  : clean_fingerprint_block(packing.words[block_index - 1],
+                                            metadata.offset);
+  Hi_1 = static_cast<uint64_t>(
+      (static_cast<unsigned __int128>(Hi_1) * metadata.multiplier) % MOD64);
 
-    prefix_hash[i] = current_hash;
+  u_int64_t block = subtract_mod(Hi, Hi_1);
+
+  // Bi = (Bi mod q) + Di.q
+  block += quotient_bit * MOD64;
+
+  return block;
+}
+
+/*
+  1. Find in which block the prefix ends at.
+  2. Extract the block it ends in, and exctract the required characters.
+  3. Extend the hash of the blocks before it.
+*/
+u_int64_t query_prefix_hash(const WordRAMCompressed &packing, size_t length) {
+
+  if (!packing.fingerprint.has_value())
+    throw invalid_argument("words aren't fingerprinted");
+
+  auto const &metadata = packing.fingerprint.value();
+
+  const size_t prefix_blocks = length / metadata.tau;
+  const int tail_count = length % metadata.tau;
+
+  if (length > packing.character_count)
+    throw invalid_argument("length exceeds string size");
+
+  u_int64_t prefix_hash = 0;
+  if (prefix_blocks)
+    prefix_hash = clean_fingerprint_block(packing.words[prefix_blocks - 1],
+                                          metadata.offset);
+
+  if (tail_count) {
+    //  |a b c| d e f g h = right shift value (8 * (8 - 3))
+    u_int64_t tail = read_fingerprint_word(packing, prefix_blocks) >>
+                     (packing.bits_per_char * (metadata.tau - tail_count));
+
+    prefix_hash = (static_cast<unsigned __int128>(prefix_hash) *
+                       binary_exponentiation(packing.base, tail_count) +
+                   tail) %
+                  MOD64;
   }
 
   return prefix_hash;
 }
 
-uint query_hash(vector<uint> &prefix_hash, int sigma, int y, int x) {
-  if (x <= 0) {
-    return prefix_hash[y];
-  }
-  // The order of operations was done this way to avoid any uint32
-  // wraparounds.
-  uint64_t removed = uint64_t(prefix_hash[x - 1]) *
-                     binary_exponentiation(sigma, y - x + 1) % MOD64;
-  return (uint64_t(prefix_hash[y]) + MOD64 - removed) % MOD64;
-}
+void pack_string(const string &text, WordRAMCompressed &encoding) {
 
-vector<u_int64_t> encode_string(string &text, int base,
-                                unordered_map<char, int> &rank) {
-
-  const int bits_per_char = compute_bits_per_char(base);
+  const int bits_per_char = compute_bits_per_char(encoding.base);
 
   vector<uint64_t> packed_text;
   // the only way I can think of packing each word is by filing each int64
@@ -217,8 +279,8 @@ vector<u_int64_t> encode_string(string &text, int base,
   int packet_size = 64;
   for (auto ch : text) {
     const int use_bits = min(packet_size, bits_per_char);
-    const uint64_t code = rank.at(ch);
-    if (code < 0 || code >= base)
+    const uint64_t code = encoding.mapping.at(ch);
+    if (code < 0 || code >= encoding.base)
       throw invalid_argument("rank outside alphabet");
     uint64_t value = code >> (bits_per_char - use_bits);
     packet <<= use_bits;
@@ -244,18 +306,21 @@ vector<u_int64_t> encode_string(string &text, int base,
     // shift the used bits to the left by padding it with trailing zeroes
     packed_text.push_back(packet << packet_size);
   }
-  return packed_text;
+  encoding.words = std::move(packed_text);
+  encoding.bits_per_char = bits_per_char;
+  encoding.character_count = text.size();
+  encoding.fingerprint.reset();
 }
 
-string decode_string(const vector<u_int64_t> &packed_text, int base,
-                     const vector<char> &rank, int n) {
-  if (n < 0)
+string unpack_string(const WordRAMCompressed &packing) {
+  if (packing.fingerprint.has_value())
+    throw invalid_argument("packing must be unhashed");
+
+  if (packing.character_count < 0)
     throw invalid_argument("character count must be nonnegative");
 
-  const int bits_per_char = compute_bits_per_char(base);
-
   string s = "";
-  s.reserve(n);
+  s.reserve(packing.character_count);
 
   // extracting back a string is a tad bit difficult.
   // The lower bits are accessible but it's the higher bits that we need.
@@ -265,18 +330,19 @@ string decode_string(const vector<u_int64_t> &packed_text, int base,
   // the block we consume completely, and if we end early, some data was
   // missing.
 
-  int block_index = 0;
+  size_t block_index = 0;
   int start_bit = 64;
+  size_t n = packing.character_count;
 
   while (n > 0) {
-    if (block_index >= packed_text.size())
+    if (block_index >= packing.words.size())
       throw invalid_argument("packed text is too short");
 
-    int end_bit = max(start_bit - bits_per_char, 0);
-    const int remaining = bits_per_char - (start_bit - end_bit);
+    int end_bit = max(start_bit - packing.bits_per_char, 0);
+    const int remaining = packing.bits_per_char - (start_bit - end_bit);
     const int ls = 64 - start_bit;
 
-    uint64_t value = (packed_text[block_index] << ls) >> (end_bit + ls);
+    uint64_t value = (packing.words[block_index] << ls) >> (end_bit + ls);
 
     start_bit = end_bit;
 
@@ -285,21 +351,21 @@ string decode_string(const vector<u_int64_t> &packed_text, int base,
       start_bit = 64;
 
       if (remaining) {
-        if (block_index >= packed_text.size())
+        if (block_index >= packing.words.size())
           throw invalid_argument("packed text is too short");
 
         end_bit = 64 - remaining;
         value <<= remaining;
-        value += (packed_text[block_index]) >> end_bit;
+        value += (packing.words[block_index]) >> end_bit;
         start_bit = end_bit;
       }
     }
 
-    if (value >= base || value >= rank.size()) {
+    if (value >= packing.base || value >= packing.rank.size()) {
       throw invalid_argument("decoded rank is invalid");
     }
 
-    s += rank[value];
+    s += packing.rank[value];
     n--;
   }
 
@@ -323,23 +389,37 @@ string decode_string(const vector<u_int64_t> &packed_text, int base,
 void compute2() {
 
   string s = "abbadabbabajabbaaakallaaa";
-  unordered_map<char, int> rank;
-  vector<char> code = {' '};
-  int mx_rank = 0;
-  rep(i, 0, s.size()) {
-    if (rank[s[i]] == 0) {
-      rank[s[i]] = ++mx_rank;
-      code.push_back(s[i]);
+  unordered_map<char, int> mapping;
+  vector<char> rank;
+  for (char ch : s) {
+    if (mapping.find(ch) == mapping.end()) {
+      mapping[ch] = rank.size();
+      rank.push_back(ch);
     }
   }
 
-  auto encoded = encode_string(s, 128, rank);
-  pVec(encoded);
-  // auto decoded = decode_string(encoded, 128, code, s.size());
-  // cout << decoded << " " << (s == decoded);
-  auto offset = inplace_fingerprint(encoded);
-  pVec(encoded);
-  cout << "offset: " << offset;
+  auto word_ram_packing = WordRAMCompressed{};
+  word_ram_packing.base = 256;
+  word_ram_packing.mapping = mapping;
+  word_ram_packing.rank = rank;
+
+  pack_string(s, word_ram_packing);
+  pVec(word_ram_packing.words);
+  auto decoded = unpack_string(word_ram_packing);
+  cout << decoded << " " << (s == decoded);
+  inplace_fingerprint(word_ram_packing);
+  pVec(word_ram_packing.words);
+
+  cout << "prefix hash at 4: " << query_prefix_hash(word_ram_packing, 4)
+       << endl;
+  cout << "prefix hash at 5: " << query_prefix_hash(word_ram_packing, 5)
+       << endl;
+  cout << "prefix hash at 6: " << query_prefix_hash(word_ram_packing, 6)
+       << endl;
+  cout << "prefix hash at 7: " << query_prefix_hash(word_ram_packing, 7)
+       << endl;
+  cout << "prefix hash at 8: " << query_prefix_hash(word_ram_packing, 8)
+       << endl;
 }
 
 signed main() {
