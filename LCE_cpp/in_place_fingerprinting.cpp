@@ -58,7 +58,7 @@ struct WordRAMCompressed {
   optional<FingerprintMetadata> fingerprint;
 };
 
-u_int64_t binary_exponentiation(u_int64_t x, int n) {
+u_int64_t binary_exponentiation(u_int64_t x, size_t n) {
   unsigned __int128 base = x % MOD64; // Assumes x >= 0.
   unsigned __int128 result = 1;
 
@@ -124,7 +124,7 @@ u_int64_t deterministicaly_find_fingerprint_offset(vector<u_int64_t> &blocks,
   u_int64_t offset = 0;
   u_int64_t MSB = 1ULL << 63;
 
-  for (int i = 0; i < blocks.size(); i++) {
+  for (size_t i = 0; i < blocks.size(); i++) {
 
     prefix_hash =
         (static_cast<unsigned __int128>(prefix_hash) * multiplier + blocks[i]) %
@@ -236,6 +236,7 @@ u_int64_t read_fingerprint_word(const WordRAMCompressed &packing,
   2. Extract the block it ends in, and exctract the required characters.
   3. Extend the hash of the blocks before it.
 */
+// [begin, end)
 u_int64_t query_prefix_hash(const WordRAMCompressed &packing, size_t length) {
 
   if (!packing.fingerprint.has_value())
@@ -268,6 +269,29 @@ u_int64_t query_prefix_hash(const WordRAMCompressed &packing, size_t length) {
   return prefix_hash;
 }
 
+/*
+  Query hash relies on prefix hashe function.
+  compute prefix hash end.
+  compute prefix hash beginning.
+  final hash = (end - (beginning-1)*(sigma^(end-beginning +1)))%q
+*/
+// [begin, end)
+u_int64_t query_hash(const WordRAMCompressed &packing, size_t begin,
+                     size_t end) {
+
+  if (begin > end || end > packing.character_count)
+    throw invalid_argument("invalid start or end");
+
+  auto end_hash = query_prefix_hash(packing, end);
+  auto start_hash = query_prefix_hash(packing, begin);
+
+  u_int64_t contribution = (static_cast<unsigned __int128>(start_hash) *
+                            binary_exponentiation(packing.base, end - begin)) %
+                           MOD64;
+
+  return subtract_mod(end_hash, contribution);
+}
+
 void pack_string(const string &text, WordRAMCompressed &encoding) {
 
   const int bits_per_char = compute_bits_per_char(encoding.base);
@@ -280,7 +304,7 @@ void pack_string(const string &text, WordRAMCompressed &encoding) {
   for (auto ch : text) {
     const int use_bits = min(packet_size, bits_per_char);
     const uint64_t code = encoding.mapping.at(ch);
-    if (code < 0 || code >= encoding.base)
+    if (code >= encoding.base)
       throw invalid_argument("rank outside alphabet");
     uint64_t value = code >> (bits_per_char - use_bits);
     packet <<= use_bits;
@@ -388,7 +412,7 @@ string unpack_string(const WordRAMCompressed &packing) {
 
 void compute2() {
 
-  string s = "abbadabbabajabbaaakallaaa";
+  string s = "allabbabssbaabssssbaab";
   unordered_map<char, int> mapping;
   vector<char> rank;
   for (char ch : s) {
@@ -410,16 +434,15 @@ void compute2() {
   inplace_fingerprint(word_ram_packing);
   pVec(word_ram_packing.words);
 
-  cout << "prefix hash at 4: " << query_prefix_hash(word_ram_packing, 4)
-       << endl;
-  cout << "prefix hash at 5: " << query_prefix_hash(word_ram_packing, 5)
-       << endl;
-  cout << "prefix hash at 6: " << query_prefix_hash(word_ram_packing, 6)
-       << endl;
-  cout << "prefix hash at 7: " << query_prefix_hash(word_ram_packing, 7)
-       << endl;
-  cout << "prefix hash at 8: " << query_prefix_hash(word_ram_packing, 8)
-       << endl;
+  cout << "string at 10:14 " << decoded.substr(10, 4)
+       << " hash: " << query_hash(word_ram_packing, 10, 14) << endl;
+  cout << "string at 18:22 " << decoded.substr(18, 4)
+       << " hash: " << query_hash(word_ram_packing, 18, 22) << endl;
+
+  cout << "string at 8:10 " << decoded.substr(8, 2)
+       << " hash: " << query_hash(word_ram_packing, 8, 10) << endl;
+  cout << "string at 15:17 " << decoded.substr(15, 2)
+       << " hash: " << query_hash(word_ram_packing, 15, 17) << endl;
 }
 
 signed main() {
