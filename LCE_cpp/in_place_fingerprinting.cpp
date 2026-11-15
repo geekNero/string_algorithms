@@ -1,6 +1,4 @@
 #include <algorithm>
-#include <climits>
-#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
@@ -45,6 +43,7 @@ struct FingerprintMetadata {
   int tau;
   u_int64_t offset;
   u_int64_t multiplier;
+  vector<u_int64_t> base_powers;
 };
 
 struct WordRAMCompressed {
@@ -69,6 +68,22 @@ u_int64_t binary_exponentiation(u_int64_t x, size_t n) {
     base *= base;
     base %= MOD64;
     result %= MOD64;
+    n >>= 1;
+  }
+  return result;
+}
+
+u_int64_t binary_exponentiation(const vector<u_int64_t> &base_powers,
+                                size_t n) {
+  uint bit = 0;
+  unsigned __int128 result = 1;
+
+  while (n > 0) {
+    if (n & 1) {
+      result *= base_powers[bit];
+      result %= MOD64;
+    }
+    bit++;
     n >>= 1;
   }
   return result;
@@ -172,11 +187,22 @@ void inplace_fingerprint(WordRAMCompressed &packing) {
   const int tau = 64 / bits_per_char;                            // 8
 
   u_int64_t prefix_hash = 0;
-  const u_int64_t multiplier = binary_exponentiation(packing.base, tau);
-  // const u_int64_t offset =
-  //     deterministicaly_find_fingerprint_offset(blocks, multiplier);
+
+  const size_t max_exponent =
+      max(packing.character_count, static_cast<size_t>(tau));
+  vector<u_int64_t> base_powers;
+  u_int64_t power = packing.base;
+
+  for (size_t remaining = max_exponent; remaining > 0; remaining >>= 1) {
+    base_powers.push_back(power);
+    power = (static_cast<unsigned __int128>(power) * power) % MOD64;
+  }
+
+  const u_int64_t multiplier = binary_exponentiation(base_powers, tau);
   const u_int64_t offset =
-      nondeterminstically_find_fingerprint_offset(packing.words, multiplier);
+      deterministicaly_find_fingerprint_offset(packing.words, multiplier);
+  // const u_int64_t offset =
+  //     nondeterminstically_find_fingerprint_offset(packing.words, multiplier);
 
   for (size_t i = 0; i < packing.words.size(); i++) {
     bool quotient_bit = packing.words[i] >= MOD64;
@@ -192,7 +218,7 @@ void inplace_fingerprint(WordRAMCompressed &packing) {
     }
   }
 
-  packing.fingerprint = {tau, offset, multiplier};
+  packing.fingerprint = {tau, offset, multiplier, std::move(base_powers)};
 
   return;
 }
@@ -261,7 +287,7 @@ u_int64_t query_prefix_hash(const WordRAMCompressed &packing, size_t length) {
                      (packing.bits_per_char * (metadata.tau - tail_count));
 
     prefix_hash = (static_cast<unsigned __int128>(prefix_hash) *
-                       binary_exponentiation(packing.base, tail_count) +
+                       binary_exponentiation(metadata.base_powers, tail_count) +
                    tail) %
                   MOD64;
   }
@@ -285,9 +311,11 @@ u_int64_t query_hash(const WordRAMCompressed &packing, size_t begin,
   auto end_hash = query_prefix_hash(packing, end);
   auto start_hash = query_prefix_hash(packing, begin);
 
-  u_int64_t contribution = (static_cast<unsigned __int128>(start_hash) *
-                            binary_exponentiation(packing.base, end - begin)) %
-                           MOD64;
+  u_int64_t contribution =
+      (static_cast<unsigned __int128>(start_hash) *
+       binary_exponentiation(packing.fingerprint.value().base_powers,
+                             end - begin)) %
+      MOD64;
 
   return subtract_mod(end_hash, contribution);
 }
