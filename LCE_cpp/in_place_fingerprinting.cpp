@@ -75,6 +75,12 @@ u_int64_t binary_exponentiation(u_int64_t x, size_t n) {
 
 u_int64_t binary_exponentiation(const vector<u_int64_t> &base_powers,
                                 size_t n) {
+  if (n == 0)
+    return 1;
+
+  if ((n & (n - 1)) == 0)
+    return base_powers[__builtin_ctzll(n)];
+
   uint bit = 0;
   unsigned __int128 result = 1;
 
@@ -424,19 +430,42 @@ string unpack_string(const WordRAMCompressed &packing) {
   return s;
 }
 
-// void compute() {
+size_t lce(WordRAMCompressed &packing, size_t x, size_t y) {
+  if (!packing.fingerprint.has_value())
+    throw invalid_argument("compressed string isn't hashed");
+  if (x >= packing.character_count || y >= packing.character_count)
+    throw invalid_argument("indices in parameter exceed string length");
+  size_t matched_length = 0;
+  u_int64_t comparison_length = 1;
+  u_int64_t max_length =
+      min(packing.character_count - x, packing.character_count - y);
+  while (comparison_length <= max_length) {
+    if (query_hash(packing, x, x + comparison_length) !=
+        query_hash(packing, y, y + comparison_length)) {
+      break;
+    }
+    matched_length = comparison_length;
+    // comparison length might wrap around before we realise it exceeds the max
+    // length
+    if (comparison_length > max_length / 2)
+      break;
+    comparison_length *= 2;
+  }
 
-//   int base = 128;
+  for (comparison_length = matched_length / 2; comparison_length > 0;
+       comparison_length /= 2) {
+    if (comparison_length > max_length - matched_length)
+      continue;
+    if (query_hash(packing, x + matched_length,
+                   x + matched_length + comparison_length) ==
+        query_hash(packing, y + matched_length,
+                   y + matched_length + comparison_length)) {
+      matched_length += comparison_length;
+    }
+  }
 
-//   string s = "lalalalala";
-//   unordered_map<char, int> ranks;
-//   uint mx_rank = 0;
-//   auto pref_hash = karp_rabin(s, base, ranks, mx_rank);
-
-//   cout << query_hash(pref_hash, base, 3, 0) << "\n";
-//   cout << query_hash(pref_hash, base, 5, 2) << "\n";
-//   cout << query_hash(pref_hash, base, 7, 4) << "\n";
-// }
+  return matched_length;
+}
 
 void compute2() {
 
@@ -462,15 +491,20 @@ void compute2() {
   inplace_fingerprint(word_ram_packing);
   pVec(word_ram_packing.words);
 
-  cout << "string at 10:14 " << decoded.substr(10, 4)
-       << " hash: " << query_hash(word_ram_packing, 10, 14) << endl;
-  cout << "string at 18:22 " << decoded.substr(18, 4)
-       << " hash: " << query_hash(word_ram_packing, 18, 22) << endl;
+  // cout << "string at 10:14 " << decoded.substr(10, 4)
+  //      << " hash: " << query_hash(word_ram_packing, 10, 14) << endl;
+  // cout << "string at 18:22 " << decoded.substr(18, 4)
+  //      << " hash: " << query_hash(word_ram_packing, 18, 22) << endl;
 
-  cout << "string at 8:10 " << decoded.substr(8, 2)
-       << " hash: " << query_hash(word_ram_packing, 8, 10) << endl;
-  cout << "string at 15:17 " << decoded.substr(15, 2)
-       << " hash: " << query_hash(word_ram_packing, 15, 17) << endl;
+  // cout << "string at 8:10 " << decoded.substr(8, 2)
+  //      << " hash: " << query_hash(word_ram_packing, 8, 10) << endl;
+  // cout << "string at 15:17 " << decoded.substr(15, 2)
+  //      << " hash: " << query_hash(word_ram_packing, 15, 17) << endl;
+
+  auto matched = lce(word_ram_packing, 10, 18);
+  cout << "LCE between index: 10 and 18: " << matched << "\n";
+  cout << "Strings with matched length: " << decoded.substr(10, matched) << " "
+       << decoded.substr(18, matched);
 }
 
 signed main() {
