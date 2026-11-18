@@ -4,26 +4,53 @@ func isParameter(b byte) bool {
 	return b >= 'a' && b <= 'z'
 }
 
-func pMatch(z int, i int, s string, occ []int) int {
-	for z+i < len(s) {
-		if isParameter(s[z]) {
-			if !isParameter(s[z+i]) {
+// extendParameterized extends a known parameterized match at start and
+// returns its total length. prevDistance is the encoding of the entire s.
+func extendParameterized(s string, prevDistance []int, start, matched int) int {
+	for matched+start < len(s) {
+		if isParameter(s[matched]) {
+			if !isParameter(s[matched+start]) {
 				break
 			}
-			boundedOccurrence := occ[z+i]
-			if z-boundedOccurrence < 0 {
-				boundedOccurrence = 0
+			distance := prevDistance[matched+start]
+			// An occurrence before start is outside the candidate substring,
+			// so this parameter is locally unseen and its distance becomes zero.
+			if distance > matched {
+				distance = 0
 			}
 
-			if boundedOccurrence != occ[z] {
+			// Equal previous-occurrence distances enforce a consistent bijection.
+			if distance != prevDistance[matched] {
 				break
 			}
-		} else if s[z] != s[z+i] {
+		} else if s[matched] != s[matched+start] {
 			break
 		}
-		z++
+		matched++
 	}
-	return z
+	return matched
+}
+
+// previousDistances encodes each parameter's distance to its previous
+// occurrence. First occurrences are zero. Fixed bytes also retain zero,
+// but are compared literally rather than through this encoding.
+func previousDistances(s string) []int {
+	prevDistance := make([]int, len(s))
+	var lastSeen [26]int // Previous byte position + 1; zero means unseen.
+
+	for i := 0; i < len(s); i++ {
+		b := s[i]
+		if !isParameter(b) {
+			continue
+		}
+
+		slot := b - 'a'
+		if previous := lastSeen[slot]; previous != 0 {
+			prevDistance[i] = i + 1 - previous
+		}
+		lastSeen[slot] = i + 1
+	}
+	return prevDistance
 }
 
 // ZBoxPMatch returns the byte-based parameterized Z-array of s.
@@ -32,46 +59,27 @@ func pMatch(z int, i int, s string, occ []int) int {
 // prefix length at byte i. By convention, z[0] is zero.
 // Empty input returns an empty slice.
 func ZBoxPMatch(s string) []int {
-	occ := make([]int, len(s))
-	prevOccurrence := map[byte]int{}
-
-	for i := 0; i < len(s); i++ {
-		b := s[i]
-		if isParameter(b) {
-			if prevOccurrence[b] > 0 {
-				occ[i] = i + 1 - prevOccurrence[b]
-			} else {
-				occ[i] = 0
-			}
-
-			prevOccurrence[b] = i + 1
-		}
-	}
-
+	prevDistance := previousDistances(s)
+	// [l, r] matches the prefix under a bijection of parameters; r never decreases.
 	l, r := 0, 0
 	z := make([]int, len(s))
 
 	for i := 1; i < len(s); i++ {
-		if r < i {
-			zVal := pMatch(0, i, s, occ)
-			z[i] = zVal
-
-			if zVal > 0 {
-				l = i
-				r = zVal + i - 1
+		if i <= r {
+			pos := i - l
+			remaining := r - i + 1
+			// A match ending inside the box can be reused without extending it.
+			if z[pos] < remaining {
+				z[i] = z[pos]
+				continue
 			}
-		} else {
-
-			alpha := z[i-l]
-			if alpha < r-i+1 {
-				z[i] = alpha
-			} else {
-				zVal := pMatch(r-i+1, i, s, occ)
-				z[i] = zVal
-				r = i + zVal - 1
-				l = i
-			}
-
+			// The box guarantees this prefix; only the part beyond it is unknown.
+			z[i] = remaining
+		}
+		z[i] = extendParameterized(s, prevDistance, i, z[i])
+		if z[i] > 0 {
+			l = i
+			r = i + z[i] - 1
 		}
 	}
 
