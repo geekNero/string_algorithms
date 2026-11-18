@@ -1,6 +1,10 @@
 package main
 
-import "fmt"
+import (
+	"fmt"
+
+	"string_algorithms/zbox"
+)
 
 func main() {
 	fmt.Println("Input Text:")
@@ -13,6 +17,6 @@ func main() {
 
 	s := pattern + "$" + text
 
-	// ZBox(text)
-	ZBoxPMatch(s)
+	fmt.Println(zbox.ZBox(text))
+	fmt.Println(zbox.ZBoxPMatch(s))
 }

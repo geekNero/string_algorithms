@@ -1,0 +1,19 @@
+# macOS metadata and debug symbols
+.DS_Store
+*.dSYM/
+
+# Build output directories
+build/
+bin/
+
+# C/C++ compilation outputs
+*.o
+*.a
+*.so
+*.dylib
+*.exe
+
+# Go test binaries and coverage reports
+*.test
+/coverage.out
+/coverage.html

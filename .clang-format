@@ -1,0 +1,6 @@
+# C++ formatting. Use gofmt for Go source files.
+BasedOnStyle: LLVM
+IndentWidth: 2
+UseTab: Never
+ColumnLimit: 80
+BreakBeforeBraces: Attach
