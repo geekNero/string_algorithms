@@ -1,0 +1,174 @@
+[
+  {
+    "name": "overlapping",
+    "text": "banana",
+    "pattern": "ana",
+    "expected": [
+      1,
+      3
+    ]
+  },
+  {
+    "name": "repeated",
+    "text": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "pattern": "aaaaaaaa",
+    "expected": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19,
+      20,
+      21,
+      22,
+      23,
+      24,
+      25,
+      26,
+      27,
+      28,
+      29,
+      30,
+      31,
+      32,
+      33,
+      34,
+      35,
+      36,
+      37,
+      38,
+      39,
+      40,
+      41,
+      42,
+      43,
+      44,
+      45,
+      46,
+      47,
+      48,
+      49,
+      50,
+      51,
+      52,
+      53,
+      54,
+      55,
+      56
+    ]
+  },
+  {
+    "name": "periodic",
+    "text": "abcaabcaabcaabcaabcaabcaabcaabcaabcaabcaabcaabcaabcaabcaabcaabca",
+    "pattern": "abcaab",
+    "expected": [
+      0,
+      4,
+      8,
+      12,
+      16,
+      20,
+      24,
+      28,
+      32,
+      36,
+      40,
+      44,
+      48,
+      52,
+      56
+    ]
+  },
+  {
+    "name": "natural_language",
+    "text": "the string algorithms match a string within another string.",
+    "pattern": "string",
+    "expected": [
+      4,
+      30,
+      52
+    ]
+  },
+  {
+    "name": "irregular_lowercase",
+    "text": "ugkcbyahmkpwnwfgvahrblagilxdsqgmegshdpngbofritemmyxlbcxjktvtmuvemxivwkzuydxgzsinpuerecxthmonraimcqgblbdpiurmmxwxgdzofazrbpbfefoqekxmjwwiflwnxsaksvsogwleheeniwtvquntupaelrwfniixtgmzjyrwkvvadypvhsfogswhqhdxmtqnnrhvuppjqhfjfmrtktxyskdkzkfxmdvmfudxrkmcfhctopwmhcaawrufbcrlabfntcaeyxnxjcswmxergelqwxslovucfcsuykwcebojiahziydcoqfmbcfopnrencodagjfbhqwvqfjrskvxwpwcnjrhtajqwxfwhmiuadgpehpfaxweuwdtqfrcegpzxlsijooyosfijkcysesliguepuhcgmjavzecmlvpyioqxmajklozwdjccvyanbibqytsqrjzatoajdgevubsravlllfvczewcyniwwqfdykhsnskzknnqhffqiqyenqnzatjfiwldwixgxheqwpaviftenjmsanxfpoukgbaiqqtiqfztwbypyqlysqttyutzwcdjapjnthdqnxchijmoxshifabeothcsuclzbrafvgqsisppkzjcekigfpzkahtwqjxqnmvywvavtphjgnpjbnpmwtovuaukhvncqtnrmnjbeeqbsjjfuaudjuylpddpzkvserlrybsisfvzxhkuqnanfblegdzspabxwzlkqufiltxloladzlfvemyfdrpdedndobwwoipnduonlmannwoadmflvwebzvuiahuybelqwevcwoffsraajrijidzirjigunefrmkwurplygxxmmkutfdrnmqehekcralwpijnonrwkwhtgrocxbpvjrqzzzreszfhspdaoklzvkzijxpldgitpjeeyakazixkdqqutyktcxwoasyaprtveyffkonzaipsdpgsavyuihnbrxoelbxdxwctotojqednnqvqxdypc",
+    "pattern": "fdykhsnskzknnqhf",
+    "expected": [
+      500
+    ]
+  },
+  {
+    "name": "no_match",
+    "text": "abcdefghijklmno",
+    "pattern": "xyz",
+    "expected": []
+  },
+  {
+    "name": "long_prefix_mismatch",
+    "text": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaab",
+    "pattern": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaac",
+    "expected": []
+  },
+  {
+    "name": "whole_text",
+    "text": "abracadabra",
+    "pattern": "abracadabra",
+    "expected": [
+      0
+    ]
+  },
+  {
+    "name": "pattern_too_long",
+    "text": "ab",
+    "pattern": "abab",
+    "expected": []
+  },
+  {
+    "name": "empty_text",
+    "text": "",
+    "pattern": "a",
+    "expected": []
+  },
+  {
+    "name": "literal_separator",
+    "text": "$a$$a",
+    "pattern": "$a",
+    "expected": [
+      0,
+      3
+    ]
+  },
+  {
+    "name": "case_sensitive",
+    "text": "Abc abc ABC abc",
+    "pattern": "abc",
+    "expected": [
+      4,
+      12
+    ]
+  },
+  {
+    "name": "utf8_byte_offsets",
+    "text": "éé",
+    "pattern": "é",
+    "expected": [
+      0,
+      2
+    ]
+  }
+]
