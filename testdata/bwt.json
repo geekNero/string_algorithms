@@ -1,0 +1,91 @@
+[
+  {
+    "name": "banana",
+    "text": "banana",
+    "first_column": "$aaabnn",
+    "last_column": "annb$aa",
+    "lf_mapping": [
+      1,
+      5,
+      6,
+      4,
+      0,
+      2,
+      3
+    ]
+  },
+  {
+    "name": "repeated",
+    "text": "aaaa",
+    "first_column": "$aaaa",
+    "last_column": "aaaa$",
+    "lf_mapping": [
+      1,
+      2,
+      3,
+      4,
+      0
+    ]
+  },
+  {
+    "name": "periodic",
+    "text": "ababab",
+    "first_column": "$aaabbb",
+    "last_column": "bbb$aaa",
+    "lf_mapping": [
+      4,
+      5,
+      6,
+      0,
+      1,
+      2,
+      3
+    ]
+  },
+  {
+    "name": "mixed_case",
+    "text": "BaNaNa",
+    "first_column": "$BNNaaa",
+    "last_column": "a$aaNNB",
+    "lf_mapping": [
+      4,
+      0,
+      5,
+      6,
+      2,
+      3,
+      1
+    ]
+  },
+  {
+    "name": "whitespace",
+    "text": " A ",
+    "first_column": "  $A",
+    "last_column": "A$  ",
+    "lf_mapping": [
+      3,
+      2,
+      0,
+      1
+    ]
+  },
+  {
+    "name": "empty",
+    "text": "",
+    "first_column": "$",
+    "last_column": "$",
+    "lf_mapping": [
+      0
+    ]
+  },
+  {
+    "name": "single_byte",
+    "text": "a",
+    "first_column": "$a",
+    "last_column": "a$",
+    "lf_mapping": [
+      1,
+      0
+    ]
+  }
+]

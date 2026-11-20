@@ -15,96 +15,123 @@ var ErrEmptyPattern = errors.New("pattern must not be empty")
 // BWTByte contains a last-column byte and its link to a first-column row.
 type BWTByte struct {
 	Char  byte
-	Index int // LF link: row corresponding to the preceding text position.
+	LFRow int // LF link: row corresponding to the preceding text position.
 }
 
-// BurrowsWheelerTransform returns the first and last columns of the transform.
+// Transform keeps the columns and LF links for one text together.
+// Construct it with BurrowsWheelerTransform; its accessors expose no mutable
+// references to the stored columns or links.
+type Transform struct {
+	firstColumn []byte
+	lastColumn  []BWTByte
+}
+
+// BurrowsWheelerTransform constructs a transform for text.
 // It preserves case and whitespace and processes bytes, not Unicode code points.
 // A unique '$' terminator is appended internally; input containing '$' returns
 // ErrReservedTerminator. Empty input is valid and produces a single '$' row.
-func BurrowsWheelerTransform(textData []byte) ([]byte, []BWTByte, error) {
-	text := string(textData)
+func BurrowsWheelerTransform(text string) (*Transform, error) {
 	if strings.IndexByte(text, '$') >= 0 {
-		return nil, nil, ErrReservedTerminator
+		return nil, ErrReservedTerminator
 	}
 	text += "$"
 	n := len(text)
 
-	substringIndices := []int{}
+	suffixArray := make([]int, n)
 	for i := range n {
-		substringIndices = append(substringIndices, i)
+		suffixArray[i] = i
 	}
 
-	slices.SortFunc(substringIndices, func(a int, b int) int {
-		if text[a:] < text[b:] {
-			return -1
-		} else if text[a:] > text[b:] {
-			return 1
-		} else {
-			return 0
-		}
+	// Sort suffixes directly to keep this learning implementation straightforward.
+	slices.SortFunc(suffixArray, func(a int, b int) int {
+		return strings.Compare(text[a:], text[b:])
 	})
 
-	lastColumn := []BWTByte{}
-	firstColumn := []byte{}
-	lastColumnIndex := map[int]int{}
+	lastColumn := make([]BWTByte, n)
+	firstColumn := make([]byte, n)
 
-	for index, i := range substringIndices {
-		lastColumnIndex[i] = index
-		firstColumn = append(firstColumn, text[i])
+	// Map each text position to the row where its suffix appears.
+	suffixRank := make([]int, n)
+
+	for i, index := range suffixArray {
+		suffixRank[index] = i
+		firstColumn[i] = text[index]
 	}
 
-	for _, i := range substringIndices {
-		lastColumn = append(lastColumn, BWTByte{Char: text[(i+n-1)%n], Index: lastColumnIndex[(i+n-1)%n]})
+	for i, index := range suffixArray {
+		// The preceding byte forms the last column; its suffix row is the LF link.
+		lastColumn[i] = BWTByte{Char: text[(index+n-1)%n], LFRow: suffixRank[(index+n-1)%n]}
 	}
 
-	return firstColumn, lastColumn, nil
+	// The first column could be derived by sorting the last; retain it for clarity.
+	return &Transform{firstColumn: firstColumn, lastColumn: lastColumn}, nil
 }
 
-// BWTSearch reports whether searchString occurs in the original text.
+// FirstColumn returns the sorted first column, including the terminator.
+func (t *Transform) FirstColumn() string {
+	return string(t.firstColumn)
+}
+
+// LastColumn returns the BWT byte sequence, including the terminator.
+func (t *Transform) LastColumn() string {
+	column := make([]byte, len(t.lastColumn))
+	for row, entry := range t.lastColumn {
+		column[row] = entry.Char
+	}
+	return string(column)
+}
+
+// LFMapping returns a copy of the row links. Entry i identifies the row for the
+// text position preceding the suffix at row i.
+func (t *Transform) LFMapping() []int {
+	links := make([]int, len(t.lastColumn))
+	for row, entry := range t.lastColumn {
+		links[row] = entry.LFRow
+	}
+	return links
+}
+
+// Contains tells whether searchString occurs in the original text.
 // Matching is case-sensitive and byte-based. An empty query returns
 // ErrEmptyPattern; a query containing '$' returns ErrReservedTerminator.
-// Pass the unmodified columns returned together by BurrowsWheelerTransform.
-func BWTSearch(firstColumn []byte, lastColumn []BWTByte, searchString string) (bool, error) {
+func (t *Transform) Contains(searchString string) (bool, error) {
 	if len(searchString) == 0 {
 		return false, ErrEmptyPattern
 	}
 	if strings.IndexByte(searchString, '$') >= 0 {
 		return false, ErrReservedTerminator
 	}
-	cutset := []int{}
+	candidateRows := []int{}
 
-	target := searchString[len(searchString)-1]
+	patternIndex := len(searchString) - 1
 
-	for index, char := range firstColumn {
-		if char == target {
-			cutset = append(cutset, index)
+	for index, char := range t.firstColumn {
+		if searchString[patternIndex] == char {
+			candidateRows = append(candidateRows, index)
 		}
 	}
 
-	if len(cutset) == 0 {
+	if len(candidateRows) == 0 {
 		return false, nil
 	}
 
-	return search(searchString[:len(searchString)-1], firstColumn, lastColumn, cutset), nil
-}
+	patternIndex--
 
-func search(searchString string, firstColumn []byte, lastColumn []BWTByte, cutset []int) bool {
-	if len(searchString) == 0 {
-		return true
-	}
-
-	newCutset := []int{}
-	target := searchString[len(searchString)-1]
-	for _, index := range cutset {
-		if lastColumn[index].Char == target {
-			newCutset = append(newCutset, lastColumn[index].Index)
+	nextCandidateRows := []int{}
+	for patternIndex >= 0 {
+		// Candidates represent the already-matched suffix of the query.
+		if len(candidateRows) == 0 {
+			return false, nil
 		}
+		for _, index := range candidateRows {
+			if t.lastColumn[index].Char == searchString[patternIndex] {
+				nextCandidateRows = append(nextCandidateRows, t.lastColumn[index].LFRow)
+			}
+		}
+		// Reuse the old input buffer only after its rows have all been read.
+		candidateRows, nextCandidateRows = nextCandidateRows, candidateRows[:0]
+		patternIndex--
 	}
-
-	if len(newCutset) == 0 {
-		return false
-	}
-
-	return search(searchString[:len(searchString)-1], firstColumn, lastColumn, newCutset)
+	// The final comparison may have removed the last remaining candidate.
+	return len(candidateRows) > 0, nil
 }
