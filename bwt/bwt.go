@@ -1,42 +1,33 @@
-package main
+package bwt
 
 import (
-	"fmt"
-	"os"
+	"errors"
 	"slices"
 	"strings"
 )
 
-type BWTRune struct {
-	char  rune
-	index int
+// ErrReservedTerminator indicates that the input contains the internal terminator.
+var ErrReservedTerminator = errors.New("'$' is reserved as the BWT terminator")
+
+// ErrEmptyPattern is returned when a search is given an empty pattern.
+var ErrEmptyPattern = errors.New("pattern must not be empty")
+
+// BWTByte contains a last-column byte and its link to a first-column row.
+type BWTByte struct {
+	Char  byte
+	Index int // LF link: row corresponding to the preceding text position.
 }
 
-func main() {
-	if len(os.Args) < 3 {
-		fmt.Println("expected args: filename searchQuery")
-		os.Exit(1)
-	}
-
-	filePath := os.Args[1]
-
-	searchQuery := os.Args[2]
-
-	textData, err := os.ReadFile(filePath)
-	if err != nil {
-		fmt.Println("failed to read file data, error: ", err.Error())
-		os.Exit(1)
-	}
-
-	firstCol, lastCol := BurrowsWheelerTransform(textData)
-
-	fmt.Println(BWTSearch(firstCol, lastCol, searchQuery))
-}
-
-func BurrowsWheelerTransform(textData []byte) ([]rune, []BWTRune) {
+// BurrowsWheelerTransform returns the first and last columns of the transform.
+// It preserves case and whitespace and processes bytes, not Unicode code points.
+// A unique '$' terminator is appended internally; input containing '$' returns
+// ErrReservedTerminator. Empty input is valid and produces a single '$' row.
+func BurrowsWheelerTransform(textData []byte) ([]byte, []BWTByte, error) {
 	text := string(textData)
-	text = strings.ToLower(text)
-	text = strings.TrimSpace(text) + "$"
+	if strings.IndexByte(text, '$') >= 0 {
+		return nil, nil, ErrReservedTerminator
+	}
+	text += "$"
 	n := len(text)
 
 	substringIndices := []int{}
@@ -54,26 +45,36 @@ func BurrowsWheelerTransform(textData []byte) ([]rune, []BWTRune) {
 		}
 	})
 
-	lastColumn := []BWTRune{}
-	firstColumn := []rune{}
+	lastColumn := []BWTByte{}
+	firstColumn := []byte{}
 	lastColumnIndex := map[int]int{}
 
 	for index, i := range substringIndices {
 		lastColumnIndex[i] = index
-		firstColumn = append(firstColumn, rune(text[i]))
+		firstColumn = append(firstColumn, text[i])
 	}
 
 	for _, i := range substringIndices {
-		lastColumn = append(lastColumn, BWTRune{char: rune(text[(i+n-1)%n]), index: lastColumnIndex[(i+n-1)%n]})
+		lastColumn = append(lastColumn, BWTByte{Char: text[(i+n-1)%n], Index: lastColumnIndex[(i+n-1)%n]})
 	}
 
-	return firstColumn, lastColumn
+	return firstColumn, lastColumn, nil
 }
 
-func BWTSearch(firstColumn []rune, lastColumn []BWTRune, searchString string) bool {
+// BWTSearch reports whether searchString occurs in the original text.
+// Matching is case-sensitive and byte-based. An empty query returns
+// ErrEmptyPattern; a query containing '$' returns ErrReservedTerminator.
+// Pass the unmodified columns returned together by BurrowsWheelerTransform.
+func BWTSearch(firstColumn []byte, lastColumn []BWTByte, searchString string) (bool, error) {
+	if len(searchString) == 0 {
+		return false, ErrEmptyPattern
+	}
+	if strings.IndexByte(searchString, '$') >= 0 {
+		return false, ErrReservedTerminator
+	}
 	cutset := []int{}
 
-	target := rune(searchString[len(searchString)-1])
+	target := searchString[len(searchString)-1]
 
 	for index, char := range firstColumn {
 		if char == target {
@@ -82,22 +83,22 @@ func BWTSearch(firstColumn []rune, lastColumn []BWTRune, searchString string) bo
 	}
 
 	if len(cutset) == 0 {
-		return false
+		return false, nil
 	}
 
-	return search(searchString[:len(searchString)-1], firstColumn, lastColumn, cutset)
+	return search(searchString[:len(searchString)-1], firstColumn, lastColumn, cutset), nil
 }
 
-func search(searchString string, firstColumn []rune, lastColumn []BWTRune, cutset []int) bool {
+func search(searchString string, firstColumn []byte, lastColumn []BWTByte, cutset []int) bool {
 	if len(searchString) == 0 {
 		return true
 	}
 
 	newCutset := []int{}
-	target := rune(searchString[len(searchString)-1])
+	target := searchString[len(searchString)-1]
 	for _, index := range cutset {
-		if lastColumn[index].char == target {
-			newCutset = append(newCutset, lastColumn[index].index)
+		if lastColumn[index].Char == target {
+			newCutset = append(newCutset, lastColumn[index].Index)
 		}
 	}
 
@@ -105,9 +106,5 @@ func search(searchString string, firstColumn []rune, lastColumn []BWTRune, cutse
 		return false
 	}
 
-	if len(searchString) == 1 {
-		return true
-	} else {
-		return search(searchString[:len(searchString)-1], firstColumn, lastColumn, newCutset)
-	}
+	return search(searchString[:len(searchString)-1], firstColumn, lastColumn, newCutset)
 }
