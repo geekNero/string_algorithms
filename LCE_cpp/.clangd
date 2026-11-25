@@ -1,7 +1,6 @@
 CompileFlags:
   Compiler: clang++
   Add:
-    - -std=c++17
     - -Wall
     - -Wextra
     - -Wconversion

@@ -14,23 +14,11 @@
 
 using namespace std;
 
-#define test                                                                   \
-  int T;                                                                       \
-  cin >> T;                                                                    \
-  while (T--)
-#define pb push_back
 #define all(x) (x).begin(), (x).end()
-#define pii pair<int, int>
-#define vi vector<int>
-#define vb vector<bool>
-#define vpii vector<pair<int, int>>
-#define rep(i, a, b) for (int i = a; i < b; i++)
-#define re(i, a, b) for (int i = a; i >= b; i--)
 #define pVec(v)                                                                \
   for (auto e : v)                                                             \
     cout << e << " ";                                                          \
   cout << "\n"
-#define aut(e, v) for (auto e : v)
 
 const u_int64_t MOD64 = (1ULL << 63) + 29ULL;
 
@@ -430,6 +418,26 @@ string unpack_string(const WordRAMCompressed &packing) {
   return s;
 }
 
+WordRAMCompressed inplace_fingerprint_wrapper(const string &text) {
+  unordered_map<char, int> mapping;
+  vector<char> rank;
+  for (char ch : text) {
+    if (mapping.find(ch) == mapping.end()) {
+      mapping[ch] = rank.size();
+      rank.push_back(ch);
+    }
+  }
+
+  auto word_ram_packing = WordRAMCompressed{};
+  word_ram_packing.base = 256;
+  word_ram_packing.mapping = mapping;
+  word_ram_packing.rank = rank;
+  pack_string(text, word_ram_packing);
+  inplace_fingerprint(word_ram_packing);
+
+  return word_ram_packing;
+}
+
 size_t lce(WordRAMCompressed &packing, size_t x, size_t y) {
   if (!packing.fingerprint.has_value())
     throw invalid_argument("compressed string isn't hashed");
@@ -470,6 +478,10 @@ size_t lce(WordRAMCompressed &packing, size_t x, size_t y) {
 void compute2() {
 
   string s = "allabbabssbaabssssbaab";
+  s += char(0x00);
+  s += char(0xFF);
+  s[14] = char(0x00);
+  s[15] = char(0xFF);
   unordered_map<char, int> mapping;
   vector<char> rank;
   for (char ch : s) {
