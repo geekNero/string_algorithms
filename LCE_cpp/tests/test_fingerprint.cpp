@@ -68,29 +68,44 @@ TEST_CASE("Verify Oracle") {
 }
 
 TEST_CASE("Binary input including null and 0xff") {
-  // Explicit bytes preserve the embedded nulls; this need not be valid UTF-8.
+  // proves strings are not handled based on null ending characters
   const string s = {'A',        char(0x00), 'B',        char(0xff), 'A',
                     char(0x00), 'B',        char(0xff), 'X'};
   INFO("seed=handwritten n=" << s.size() << " input_hex=" << to_hex(s));
   auto packing = inplace_fingerprint_wrapper(s);
   REQUIRE(packing.character_count == 9);
-  REQUIRE(oracle_lce(s, 0, 4) == 4);
-  REQUIRE(lce(packing, 0, 4) == 4);
+  struct BinaryQuery {
+    size_t i;
+    size_t j;
+    size_t expected;
+  };
+
+  const BinaryQuery cases[] = {
+      {0, 4, 4}, // match through 0x00 and 0xff, stop at 'A' vs 'X'
+      {4, 0, 4}, // symmetry (i > j)
+      {1, 5, 3}, // start directly on 0x00
+      {3, 7, 1}, // start directly on 0xff (end of first word)
+      {1, 3, 0}, // direct mismatch: 0x00 vs 0xff
+      {1, 1, 8}, // self-query starting on 0x00 through end of string
+  };
+
   size_t queries_tested = 0;
-  for (size_t i = 0; i < s.size(); ++i) {
-    for (size_t j = 0; j < s.size(); ++j) {
-      const auto expected = oracle_lce(s, i, j);
-      const auto actual = lce(packing, i, j);
-      INFO("i=" << i << " j=" << j << " expected=" << expected
-                << " actual=" << actual);
-      REQUIRE_EQ(expected, actual);
-      ++queries_tested;
-    }
+  for (const auto &q : cases) {
+
+    const auto oracle = oracle_lce(s, q.i, q.j);
+    const auto actual = lce(packing, q.i, q.j);
+    INFO("i=" << q.i << " j=" << q.j << " expected=" << q.expected
+              << " oracle=" << oracle << " actual=" << actual);
+    // ensuring the oracle
+    REQUIRE_EQ(oracle, q.expected);
+    REQUIRE_EQ(actual, q.expected);
+    ++queries_tested;
   }
+
   CHECK_THROWS_AS(lce(packing, s.size(), 0), invalid_argument);
   CHECK_THROWS_AS(lce(packing, 0, s.size()), invalid_argument);
-  cout << "Binary phase: strings=1 all_pairs_queries=" << queries_tested
-       << " handwritten_queries=1\n";
+
+  cout << "Binary phase: strings=1 targeted_queries=" << queries_tested << "\n";
 }
 
 TEST_CASE("Random Inputs") {
@@ -128,4 +143,69 @@ TEST_CASE("Random Inputs") {
 
   cout << "Random phase: seed=" << seed << " strings=" << strings_tested
        << " queries=" << queries_tested << "\n";
+}
+
+TEST_CASE("Binary Alphabet - extensive queries") {
+  unsigned int limit = (1 << 9);
+  size_t queries_tested = 0;
+  size_t strings_tested = 0;
+  for (unsigned int test = 0; test < limit; test++) {
+    string s = format("{:0{}b}", test, 9);
+    INFO("seed=handwritten n=" << s.size() << " input_hex=" << to_hex(s));
+    auto packing = inplace_fingerprint_wrapper(s);
+    REQUIRE(packing.character_count == 9);
+    strings_tested++;
+    for (size_t i = 0; i < s.size(); i++) {
+      for (size_t j = i; j < s.size(); j++) {
+        const auto oracle = oracle_lce(s, i, j);
+        const auto actual = lce(packing, i, j);
+        INFO("i=" << i << " j=" << j << " expected=" << oracle
+                  << " actual=" << actual);
+        // ensuring the oracle
+        REQUIRE_EQ(actual, oracle);
+        ++queries_tested;
+      }
+    }
+  }
+  cout << "Binary Alphabet: strings=" << strings_tested
+       << " targeted_queries=" << queries_tested << "\n";
+}
+
+TEST_CASE("Longer matching LCE") {
+  string s = "";
+  int lengths[] = {1,  2,  7,  8,  9,  15,  16,  17, 31,
+                   32, 33, 63, 64, 65, 127, 128, 129};
+
+  char cur = 'a';
+  struct query {
+    int i;
+    int j;
+  };
+
+  vector<query> queries;
+
+  for (int i : lengths) {
+    int l = s.size();
+    s += string(i, cur) + 'X';
+    int r = s.size();
+    s += string(i, cur) + 'Y';
+    queries.push_back({l, r});
+    cur++;
+  }
+  INFO("seed=handwritten n=" << s.size() << " input_hex=" << to_hex(s));
+
+  auto packing = inplace_fingerprint_wrapper(s);
+
+  CHECK(packing.character_count == s.size());
+  for (const auto &q : queries) {
+    auto actual = lce(packing, q.i, q.j);
+    auto expected = oracle_lce(s, q.i, q.j);
+
+    INFO("i=" << q.i << " j=" << q.j << " expected=" << expected
+              << " actual=" << actual << "\n");
+    REQUIRE_EQ(actual, expected);
+  }
+
+  cout << "Longer matching LCE: strings=1"
+       << " targeted_queries=" << queries.size() << "\n";
 }
