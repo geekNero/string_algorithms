@@ -22,7 +22,19 @@ using namespace std;
     cout << e << " ";                                                          \
   cout << "\n"
 
-const u_int64_t MOD64 = (1ULL << 63) + 29ULL;
+constexpr uint64_t MOD64 = (1ULL << 63) + 29ULL;
+
+constexpr auto BASE_POWERS = [] {
+  std::array<uint64_t, std::numeric_limits<size_t>::digits> powers{};
+  uint64_t power = 256;
+
+  for (auto &entry : powers) {
+    entry = power;
+    power = (static_cast<unsigned __int128>(power) * power) % MOD64;
+  }
+
+  return powers;
+}();
 
 uint64_t subtract_mod(uint64_t a, uint64_t b) {
   return a >= b ? a - b : MOD64 - (b - a);
@@ -33,7 +45,6 @@ struct FingerprintMetadata {
   int tau;
   u_int64_t offset;
   u_int64_t multiplier;
-  vector<u_int64_t> base_powers;
 };
 
 export struct WordRAMCompressed {
@@ -63,20 +74,19 @@ u_int64_t binary_exponentiation(u_int64_t x, size_t n) {
   return result;
 }
 
-u_int64_t binary_exponentiation(const vector<u_int64_t> &base_powers,
-                                size_t n) {
+u_int64_t binary_exponentiation(size_t n) {
   if (n == 0)
     return 1;
 
   if ((n & (n - 1)) == 0)
-    return base_powers[__builtin_ctzll(n)];
+    return BASE_POWERS[__builtin_ctzll(n)];
 
   unsigned int bit = 0;
   unsigned __int128 result = 1;
 
   while (n > 0) {
     if (n & 1) {
-      result *= base_powers[bit];
+      result *= BASE_POWERS[bit];
       result %= MOD64;
     }
     bit++;
@@ -184,17 +194,7 @@ void inplace_fingerprint(WordRAMCompressed &packing) {
 
   u_int64_t prefix_hash = 0;
 
-  const size_t max_exponent =
-      max(packing.character_count, static_cast<size_t>(tau));
-  vector<u_int64_t> base_powers;
-  u_int64_t power = packing.base;
-
-  for (size_t remaining = max_exponent; remaining > 0; remaining >>= 1) {
-    base_powers.push_back(power);
-    power = (static_cast<unsigned __int128>(power) * power) % MOD64;
-  }
-
-  const u_int64_t multiplier = binary_exponentiation(base_powers, tau);
+  const u_int64_t multiplier = binary_exponentiation(tau);
   const u_int64_t offset =
       deterministicaly_find_fingerprint_offset(packing.words, multiplier);
   // const u_int64_t offset =
@@ -214,7 +214,7 @@ void inplace_fingerprint(WordRAMCompressed &packing) {
     }
   }
 
-  packing.fingerprint = {tau, offset, multiplier, std::move(base_powers)};
+  packing.fingerprint = {tau, offset, multiplier};
 
   return;
 }
@@ -283,7 +283,7 @@ u_int64_t query_prefix_hash(const WordRAMCompressed &packing, size_t length) {
                      (packing.bits_per_char * (metadata.tau - tail_count));
 
     prefix_hash = (static_cast<unsigned __int128>(prefix_hash) *
-                       binary_exponentiation(metadata.base_powers, tail_count) +
+                       binary_exponentiation(tail_count) +
                    tail) %
                   MOD64;
   }
@@ -307,11 +307,9 @@ u_int64_t query_hash(const WordRAMCompressed &packing, size_t begin,
   auto end_hash = query_prefix_hash(packing, end);
   auto start_hash = query_prefix_hash(packing, begin);
 
-  u_int64_t contribution =
-      (static_cast<unsigned __int128>(start_hash) *
-       binary_exponentiation(packing.fingerprint.value().base_powers,
-                             end - begin)) %
-      MOD64;
+  u_int64_t contribution = (static_cast<unsigned __int128>(start_hash) *
+                            binary_exponentiation(end - begin)) %
+                           MOD64;
 
   return subtract_mod(end_hash, contribution);
 }
